@@ -10,7 +10,7 @@ from .series import Series
 from .experiment import Experiment
 from .tracedb import TraceDB
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 __author__ = "SCAM Contributors" 
 __email__ = "info@example.com"
 

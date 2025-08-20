@@ -53,22 +53,31 @@ analysis_db = TraceDB.load_hdf5("experiment_data.h5")
 traces = analysis_db["aes_attack"]["power_traces"]
 ```
 
-## Streaming for Large Datasets
+## Unified API for Batch and Streaming (v0.3.0+)
+
+The same `add_trace()` method works for both batch and streaming modes:
 
 ```python
-# For crash-safe real-time collection
+# Batch mode (default) - collect in memory
 series = Series("power_traces", traces=[])
-series.open_hdf5_stream("live_data.h5", "experiment_name")
-
 for measurement in data_stream:
     trace = Trace(samples=measurement)
-    series.append_trace_to_stream(trace)
-    
-    # Flush every 50 traces for crash protection
-    if len(series) % 50 == 0:
-        series.flush_stream()
+    series.add_trace(trace)  # Just memory
 
-series.close_stream()
+# Streaming mode - persist immediately to disk
+series.enable_streaming("live_data.h5", "experiment_name")
+for measurement in data_stream:
+    trace = Trace(samples=measurement)
+    series.add_trace(trace, persist=True)  # Direct to disk
+series.disable_streaming()
+
+# Hybrid mode - switch between batch and streaming
+series.add_trace(trace1)  # Memory only
+series.enable_streaming("data.h5", "exp", mode='a')  # Append mode
+series.add_trace(trace2, persist=True)  # To disk
+series.add_trace(trace3, persist=True, flush=True)  # Force flush
+series.disable_streaming()
+series.add_trace(trace4)  # Back to memory only
 ```
 
 ## Data Structure
@@ -136,6 +145,7 @@ See the `examples/` directory for:
 - `basic_usage.py` - Basic data collection and analysis
 - `convenience_methods.py` - Get-or-create methods and warnings
 - `safe_measurement_workflow.py` - Data safety features and best practices
+- `unified_api_demo.py` - Unified batch/streaming API demonstration
 
 ## Testing
 
@@ -168,6 +178,17 @@ MIT License - see LICENSE file for details.
 5. Submit a pull request
 
 ## Changelog
+
+### v0.3.0
+- **Unified API**: Single `add_trace()` method for both batch and streaming modes
+- Added `persist` parameter to `add_trace()` for immediate HDF5 persistence
+- Added `flush` parameter for manual flush control
+- Streaming append mode (`mode='a'`) to add to existing files
+- Context manager support for safe streaming
+- Auto-flush intervals with manual override
+- Backward compatible - old methods work with deprecation warnings
+- New tests: `test_unified_api.py` (11 tests)
+- New example: `unified_api_demo.py`
 
 ### v0.2.0
 - **CRITICAL FIX**: `save_hdf5()` now merges by default instead of overwriting
