@@ -15,7 +15,7 @@ import tempfile
 import os
 import numpy as np
 from datetime import datetime
-from sca_datamodel import TraceDB, Experiment, Series, Trace
+from scam import TraceDB, Experiment, Series, Trace
 
 
 class TestTrace(unittest.TestCase):

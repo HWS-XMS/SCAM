@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Basic usage example for SCA Data Model.
+Basic usage example for SCAM (Side Channel Analysis Measurements).
 
 Demonstrates:
 - Creating experiments and series
@@ -11,7 +11,7 @@ Demonstrates:
 
 import numpy as np
 from datetime import datetime
-from sca_datamodel import TraceDB, Experiment, Series, Trace
+from scam import TraceDB, Experiment, Series, Trace
 
 
 def basic_data_collection():
@@ -129,7 +129,7 @@ def streaming_collection_example():
 
 
 if __name__ == "__main__":
-    print("SCA Data Model - Basic Usage Examples")
+    print("SCAM - Basic Usage Examples")
     print("=" * 50)
     
     print("\n1. Basic Data Collection:")

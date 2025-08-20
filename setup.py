@@ -1,5 +1,5 @@
 """
-Setup script for SCA Data Model package.
+Setup script for SCAM (Side Channel Analysis Measurements) package.
 """
 
 from setuptools import setup, find_packages
@@ -7,7 +7,7 @@ import os
 
 # Read version from __init__.py
 def get_version():
-    version_file = os.path.join(os.path.dirname(__file__), 'sca_datamodel', '__init__.py')
+    version_file = os.path.join(os.path.dirname(__file__), 'scam', '__init__.py')
     with open(version_file, 'r') as f:
         for line in f:
             if line.startswith('__version__'):
@@ -23,14 +23,14 @@ def get_long_description():
     return ''
 
 setup(
-    name='sca-datamodel',
+    name='scam',
     version=get_version(),
-    author='SCA Data Model Contributors',
+    author='SCAM Contributors',
     author_email='info@example.com',
-    description='A Python package for managing Side Channel Analysis data',
+    description='SCAM - Side Channel Analysis Measurements',
     long_description=get_long_description(),
     long_description_content_type='text/markdown',
-    url='https://github.com/example/sca-datamodel',
+    url='https://github.com/example/scam',
     packages=find_packages(),
     classifiers=[
         'Development Status :: 4 - Beta',
@@ -66,8 +66,8 @@ setup(
         ],
     },
     project_urls={
-        'Bug Reports': 'https://github.com/example/sca-datamodel/issues',
-        'Source': 'https://github.com/example/sca-datamodel',
-        'Documentation': 'https://sca-datamodel.readthedocs.io/',
+        'Bug Reports': 'https://github.com/example/scam/issues',
+        'Source': 'https://github.com/example/scam',
+        'Documentation': 'https://scam.readthedocs.io/',
     },
 )

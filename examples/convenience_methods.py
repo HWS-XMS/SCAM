@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Convenience methods example for SCA Data Model.
+Convenience methods example for SCAM (Side Channel Analysis Measurements).
 
 Demonstrates the get_or_create methods that simplify
 experiment and series management.
@@ -8,7 +8,7 @@ experiment and series management.
 
 import numpy as np
 import warnings
-from sca_datamodel import TraceDB, Trace
+from scam import TraceDB, Trace
 
 
 def demonstrate_convenience_methods():
@@ -103,7 +103,7 @@ def realistic_workflow():
 
 
 if __name__ == "__main__":
-    print("SCA Data Model - Convenience Methods Examples")
+    print("SCAM - Convenience Methods Examples")
     print("=" * 55)
     
     print("\n1. Basic Convenience Methods:")

@@ -1,3 +1,32 @@
+Metadata-Version: 2.1
+Name: scam
+Version: 0.1.0
+Summary: SCAM - Side Channel Analysis Measurements
+Home-page: https://github.com/example/scam
+Author: SCAM Contributors
+Author-email: info@example.com
+License: UNKNOWN
+Project-URL: Bug Reports, https://github.com/example/scam/issues
+Project-URL: Source, https://github.com/example/scam
+Project-URL: Documentation, https://scam.readthedocs.io/
+Platform: UNKNOWN
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Science/Research
+Classifier: Topic :: Scientific/Engineering :: Information Analysis
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+Provides-Extra: dev
+Provides-Extra: examples
+License-File: LICENSE
+
 # SCAM - Side Channel Analysis Measurements
 
 A Python package for organizing and managing Side Channel Analysis data with HDF5 persistence.
@@ -136,3 +165,4 @@ MIT License - see LICENSE file for details.
 - Streaming support with crash protection
 - Convenience methods with warnings
 - Comprehensive test suite
+
