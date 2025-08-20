@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "scam"
-version = "0.3.0"
+version = "1.0.0"
 description = "Sparse Canonical Analysis for Multimodal Data Integration"
 readme = "README.md"
 requires-python = ">=3.7"
@@ -13,7 +13,7 @@ authors = [
     {name = "Your Name", email = "your.email@example.com"}
 ]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Science/Research",
     "Topic :: Scientific/Engineering :: Bio-Informatics",
     "Programming Language :: Python :: 3",

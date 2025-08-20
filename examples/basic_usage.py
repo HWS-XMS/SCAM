@@ -74,6 +74,10 @@ def basic_data_analysis():
     print(f"Loaded experiment: {experiment.name}")
     print(f"Device: {experiment.metadata['device']}")
     print(f"Algorithm: {experiment.metadata['algorithm']}")
+    
+    # Open series for reading (lazy loading)
+    power_traces.open_for_reading()
+    
     print(f"Number of traces: {len(power_traces)}")
     print(f"Sampling rate: {power_traces.metadata['sampling_rate']} Hz")
     
@@ -83,10 +87,12 @@ def basic_data_analysis():
     
     print(f"Trace length: {trace_lengths[0]} samples")
     print(f"Mean power consumption: {mean_power:.6f}")
+    
+    power_traces.close_reading()
 
 
 def streaming_collection_example():
-    """Demonstrate streaming collection with crash protection."""
+    """Demonstrate automatic streaming with new always-stream architecture."""
     # Create series
     power_series = Series("streaming_power", traces=[])
     power_series.metadata = {
@@ -94,8 +100,8 @@ def streaming_collection_example():
         "sampling_rate": 500000000  # 500 MHz
     }
     
-    # Open streaming file
-    power_series.open_hdf5_stream("streaming_data.h5", "streaming_experiment")
+    # Open for writing - automatically streams everything to disk
+    power_series.open_for_writing("streaming_data.h5", "streaming_experiment")
     
     try:
         # Simulate real-time data collection
@@ -109,23 +115,24 @@ def streaming_collection_example():
                 response=f"output_{i}"
             )
             
-            # Stream to disk immediately
-            power_series.append_trace_to_stream(trace)
+            # Add trace - automatically persisted to disk!
+            power_series.add_trace(trace)
             
-            # Flush every 10 traces for crash protection
-            if i % 10 == 0:
-                power_series.flush_stream()
+            if (i + 1) % 10 == 0:
+                print(f"Streamed {i + 1} traces...")
                 
-        print(f"Streamed {len(power_series)} traces to disk")
+        print(f"Streamed {len(power_series.traces)} traces to disk")
         
     finally:
-        # Always close the stream
-        power_series.close_stream()
+        # Always close writing
+        power_series.close_writing()
     
     # Verify streaming worked
     db = TraceDB.load_hdf5("streaming_data.h5")
     loaded_traces = db["streaming_experiment"]["streaming_power"]
+    loaded_traces.open_for_reading()
     print(f"Verified: {len(loaded_traces)} traces loaded from stream")
+    loaded_traces.close_reading()
 
 
 if __name__ == "__main__":

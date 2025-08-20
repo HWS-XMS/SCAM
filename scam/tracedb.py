@@ -54,6 +54,19 @@ class TraceDB:
             # Load existing data first
             existing_db = TraceDB.load_hdf5(filename)
             
+            # Before merging, ensure all lazy-loaded series have their data loaded
+            # This is necessary because we'll overwrite the source file
+            for exp in existing_db.experiments.values():
+                for series in exp.series:
+                    if series._source and not series.traces:
+                        # Load the data into memory before we overwrite the file
+                        series.open_for_reading()
+                        # Load all traces into memory
+                        series.traces = list(series)
+                        series.close_reading()
+                        # Clear the source since data is now in memory
+                        series._source = None
+            
             # Merge current data into existing
             for exp_name, experiment in self.experiments.items():
                 if exp_name in existing_db.experiments:
@@ -97,6 +110,7 @@ class TraceDB:
                         elif isinstance(value, (int, float)):
                             series_group.attrs[key] = value
                     
+                    # Write from in-memory traces
                     traces_data = []
                     timestamps = []
                     stimuli = []
@@ -110,6 +124,9 @@ class TraceDB:
                         responses.append(str(trace.response) if trace.response is not None else "")
                         keys.append(str(trace.key) if trace.key is not None else "")
                     
+                    # Always set trace_count
+                    series_group.attrs['trace_count'] = len(traces_data)
+                    
                     if traces_data:
                         series_group.create_dataset('samples', data=np.array(traces_data))
                         series_group.create_dataset('timestamps', data=[t.encode('utf-8') for t in timestamps])
@@ -119,6 +136,7 @@ class TraceDB:
     
     @classmethod
     def load_hdf5(cls, filename):
+        """Load database from HDF5 file - ALWAYS lazy."""
         db = cls()
         
         with h5py.File(filename, 'r') as f:
@@ -132,26 +150,14 @@ class TraceDB:
                 for series_name in exp_group.keys():
                     series_group = exp_group[series_name]
                     
+                    # Create series with lazy loading source
                     series = Series(name=series_name, traces=[])
-                    for attr_name in series_group.attrs:
-                        series.metadata[attr_name] = series_group.attrs[attr_name]
+                    series._source = (filename, exp_name)
                     
-                    if 'samples' in series_group:
-                        samples_data = series_group['samples'][:]
-                        timestamps_data = [t.decode('utf-8') for t in series_group['timestamps'][:]]
-                        stimuli_data = [s.decode('utf-8') if s.decode('utf-8') else None for s in series_group['stimuli'][:]]
-                        responses_data = [r.decode('utf-8') if r.decode('utf-8') else None for r in series_group['responses'][:]]
-                        keys_data = [k.decode('utf-8') if k.decode('utf-8') else None for k in series_group['keys'][:]]
-                        
-                        for i in range(len(samples_data)):
-                            trace = Trace(
-                                samples=samples_data[i],
-                                timestamp=datetime.fromisoformat(timestamps_data[i]),
-                                stimulus=stimuli_data[i],
-                                response=responses_data[i],
-                                key=keys_data[i]
-                            )
-                            series.traces.append(trace)
+                    # Load metadata only
+                    for attr_name in series_group.attrs:
+                        if attr_name not in ['trace_count', 'measurement_id']:  # Skip internal attributes
+                            series.metadata[attr_name] = series_group.attrs[attr_name]
                     
                     experiment.series.append(series)
                 

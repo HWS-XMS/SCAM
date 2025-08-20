@@ -92,25 +92,28 @@ class TestSeries(unittest.TestCase):
         self.assertEqual(len(traces), 2)
         self.assertEqual(traces[0], self.trace1)
     
-    def test_series_streaming_hdf5(self):
-        """Test streaming HDF5 functionality."""
+    def test_series_writing(self):
+        """Test series writing functionality."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            filename = os.path.join(tmpdir, "test_stream.h5")
+            filename = os.path.join(tmpdir, "test_write.h5")
             
-            self.series.open_hdf5_stream(filename, "test_experiment")
+            # Open for writing (always streams)
+            self.series.open_for_writing(filename, "test_experiment")
             
             for i in range(10):
                 trace = Trace(samples=np.array([i, i+1, i+2]))
-                self.series.append_trace_to_stream(trace)
+                self.series.add_trace(trace)  # Auto-persists
             
-            self.series.flush_stream()
-            self.series.close_stream()
+            self.series.close_writing()
             
             self.assertTrue(os.path.exists(filename))
             
+            # Load lazily and verify
             db = TraceDB.load_hdf5(filename)
             loaded_series = db["test_experiment"]["test_series"]
+            loaded_series.open_for_reading()
             self.assertEqual(len(loaded_series), 10)
+            loaded_series.close_reading()
 
 
 class TestExperiment(unittest.TestCase):
@@ -232,6 +235,7 @@ class TestTraceDB(unittest.TestCase):
             self.db.save_hdf5(filename)
             self.assertTrue(os.path.exists(filename))
             
+            # Load lazily
             loaded_db = TraceDB.load_hdf5(filename)
             
             self.assertEqual(len(loaded_db), 1)
@@ -239,12 +243,17 @@ class TestTraceDB(unittest.TestCase):
             self.assertEqual(loaded_exp.metadata["device"], "STM32F4")
             
             loaded_series = loaded_exp["power_traces"]
-            self.assertEqual(len(loaded_series), 5)
             self.assertEqual(loaded_series.metadata["probe"], "CT-1")
+            
+            # Open for reading to access traces
+            loaded_series.open_for_reading()
+            self.assertEqual(len(loaded_series), 5)
             
             loaded_trace = loaded_series[0]
             np.testing.assert_array_equal(loaded_trace.samples, np.array([0, 1, 2]))
             self.assertEqual(loaded_trace.stimulus, "input_0")
+            
+            loaded_series.close_reading()
 
 
 class TestIntegration(unittest.TestCase):
@@ -270,15 +279,20 @@ class TestIntegration(unittest.TestCase):
             
             db.save_hdf5(filename)
             
+            # Load lazily for analysis
             analysis_db = TraceDB.load_hdf5(filename)
             analysis_series = analysis_db["aes_attack"]["power_traces"]
             
+            # Open for reading
+            analysis_series.open_for_reading()
             self.assertEqual(len(analysis_series), 20)
             
             for i, trace in enumerate(analysis_series):
                 self.assertEqual(len(trace.samples), 1000)
                 self.assertEqual(trace.stimulus, f"plaintext_{i:02d}")
                 self.assertEqual(trace.response, f"ciphertext_{i:02d}")
+            
+            analysis_series.close_reading()
 
 
 if __name__ == "__main__":

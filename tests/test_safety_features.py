@@ -220,19 +220,26 @@ class TestSafetyFeatures(unittest.TestCase):
         series1_loaded = next(s for s in exp.series if s.name == "Series1")
         series2_loaded = next(s for s in exp.series if s.name == "Series2")
         
+        # Open for reading
+        series1_loaded.open_for_reading()
+        series2_loaded.open_for_reading()
+        
         # Verify Series1 data
-        self.assertEqual(len(series1_loaded.traces), 3)
-        for i, trace in enumerate(series1_loaded.traces):
+        self.assertEqual(len(series1_loaded), 3)
+        for i, trace in enumerate(series1_loaded):
             np.testing.assert_array_equal(trace.samples, np.ones(10) * i)
             self.assertEqual(trace.stimulus, f"stim1_{i}")
             self.assertEqual(trace.key, f"key1_{i}")
         
         # Verify Series2 data
-        self.assertEqual(len(series2_loaded.traces), 3)
-        for i, trace in enumerate(series2_loaded.traces):
+        self.assertEqual(len(series2_loaded), 3)
+        for i, trace in enumerate(series2_loaded):
             np.testing.assert_array_equal(trace.samples, np.ones(10) * (i + 10))
             self.assertEqual(trace.stimulus, f"stim2_{i}")
             self.assertEqual(trace.key, f"key2_{i}")
+        
+        series1_loaded.close_reading()
+        series2_loaded.close_reading()
     
     def test_empty_database_save(self):
         """Test saving an empty database."""
