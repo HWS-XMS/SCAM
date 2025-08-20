@@ -6,6 +6,7 @@ A Python package for organizing and managing Side Channel Analysis data with HDF
 
 - **Hierarchical Organization**: TraceDB → Experiment → Series → Trace
 - **HDF5 Persistence**: Efficient storage with metadata preservation
+- **Data Safety**: Automatic merging prevents accidental data loss (v0.2.0+)
 - **Crash-Safe Streaming**: Real-time data capture with flush protection
 - **Convenient APIs**: Get-or-create methods with helpful warnings
 - **Shape Validation**: Automatic trace compatibility checking
@@ -44,7 +45,7 @@ for i in range(100):
     )
     series.add_trace(trace)
 
-# Save to HDF5
+# Save to HDF5 (v0.2.0+ merges by default, preventing data loss)
 db.save_hdf5("experiment_data.h5")
 
 # Load for analysis
@@ -92,11 +93,49 @@ series.close_stream()
 - Collection of experiments
 - Complete HDF5 persistence
 
+## Data Safety (v0.2.0+)
+
+The library now protects your data by default:
+
+```python
+# First measurement run
+db1 = TraceDB()
+exp1 = db1.get_or_create_experiment("RV32I")
+series1 = exp1.get_or_create_series("fixed_keys")
+# ... add traces ...
+db1.save_hdf5("data.h5")  # Creates new file
+
+# Second measurement run
+db2 = TraceDB()
+exp2 = db2.get_or_create_experiment("RV32I")
+series2 = exp2.get_or_create_series("random_keys")
+# ... add traces ...
+db2.save_hdf5("data.h5")  # MERGES with existing file (safe by default!)
+
+# Both series are preserved in the file
+loaded = TraceDB.load_hdf5("data.h5")
+# loaded["RV32I"] now contains both "fixed_keys" and "random_keys" series
+```
+
+### Save Modes
+
+- **`mode='update'` (default)**: Merges with existing file, preserving all data
+- **`mode='overwrite'`**: Replaces file (requires `overwrite_ok=True` for safety)
+
+```python
+# Safe merge (default)
+db.save_hdf5("data.h5")
+
+# Explicit overwrite when intended
+db.save_hdf5("data.h5", mode='overwrite', overwrite_ok=True)
+```
+
 ## Examples
 
 See the `examples/` directory for:
 - `basic_usage.py` - Basic data collection and analysis
 - `convenience_methods.py` - Get-or-create methods and warnings
+- `safe_measurement_workflow.py` - Data safety features and best practices
 
 ## Testing
 
@@ -129,6 +168,14 @@ MIT License - see LICENSE file for details.
 5. Submit a pull request
 
 ## Changelog
+
+### v0.2.0
+- **CRITICAL FIX**: `save_hdf5()` now merges by default instead of overwriting
+- Added `mode` parameter to `save_hdf5()` for explicit control
+- Added `overwrite_ok` safety flag to prevent accidental data loss
+- Warning system for duplicate series names
+- New comprehensive safety tests
+- New example: `safe_measurement_workflow.py`
 
 ### v0.1.0
 - Initial release

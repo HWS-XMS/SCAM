@@ -31,9 +31,55 @@ class TraceDB:
             return self.experiments.pop(name)
         raise KeyError(f"Experiment '{name}' not found")
     
-    def save_hdf5(self, filename):
-        with h5py.File(filename, 'w') as f:
+    def save_hdf5(self, filename, mode='update', overwrite_ok=False):
+        """
+        Save database to HDF5 file.
+        
+        Args:
+            filename: Path to save the HDF5 file
+            mode: 'update' to merge with existing file, 'overwrite' to replace completely
+            overwrite_ok: If False, will raise error when overwriting existing data
+        """
+        import os
+        
+        if mode not in ['update', 'overwrite']:
+            raise ValueError("mode must be 'update' or 'overwrite'")
+        
+        file_exists = os.path.exists(filename)
+        
+        if mode == 'overwrite' and file_exists and not overwrite_ok:
+            raise ValueError(f"File '{filename}' already exists. Set overwrite_ok=True to overwrite or use mode='update' to merge.")
+        
+        if mode == 'update' and file_exists:
+            # Load existing data first
+            existing_db = TraceDB.load_hdf5(filename)
+            
+            # Merge current data into existing
             for exp_name, experiment in self.experiments.items():
+                if exp_name in existing_db.experiments:
+                    # Merge series within existing experiment
+                    existing_exp = existing_db.experiments[exp_name]
+                    existing_series_names = {s.name for s in existing_exp.series}
+                    
+                    for series in experiment.series:
+                        if series.name in existing_series_names:
+                            warnings.warn(f"Series '{series.name}' in experiment '{exp_name}' already exists. Skipping to avoid data loss. Use unique series names or overwrite_ok=True.", UserWarning)
+                        else:
+                            existing_exp.series.append(series)
+                else:
+                    # Add new experiment
+                    existing_db.experiments[exp_name] = experiment
+            
+            # Now save the merged database
+            self._write_hdf5(filename, existing_db.experiments)
+        else:
+            # Write new file or overwrite
+            self._write_hdf5(filename, self.experiments)
+    
+    def _write_hdf5(self, filename, experiments_dict):
+        """Internal method to write experiments to HDF5."""
+        with h5py.File(filename, 'w') as f:
+            for exp_name, experiment in experiments_dict.items():
                 exp_group = f.create_group(exp_name)
                 
                 for key, value in experiment.metadata.items():
