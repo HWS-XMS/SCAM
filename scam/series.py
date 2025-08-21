@@ -52,7 +52,7 @@ class Series:
     
     # ============ WRITE Mode (Always Streaming) ============
     
-    def open_for_writing(self, filename, experiment_name, mode='w', chunk_size=100, experiment_metadata=None, 
+    def open_for_writing(self, filename, experiment_name, mode='auto', chunk_size=100, experiment_metadata=None, 
                          measurement_id=None, confirm_append=True):
         """
         Open series for writing - ALWAYS streams to HDF5.
@@ -60,7 +60,7 @@ class Series:
         Args:
             filename: HDF5 file to write to
             experiment_name: Name of experiment group
-            mode: 'w' for new file, 'a' for append
+            mode: 'auto' (safe default), 'w' for new file only, 'a' for explicit append
             chunk_size: HDF5 chunk size for efficiency
             experiment_metadata: Optional experiment metadata
             measurement_id: Optional measurement session identifier. If None, uses session UUID
@@ -75,8 +75,21 @@ class Series:
         
         import os
         
-        # Handle append mode
-        if mode == 'a' and os.path.exists(filename):
+        # Handle file access mode
+        if os.path.exists(filename):
+            # File exists - determine safe mode
+            if mode == 'w':
+                # User explicitly specified overwrite mode - this should be blocked
+                raise ValueError(
+                    f"File '{filename}' already exists. Cannot use mode='w' as it would overwrite all data. "
+                    f"Use mode='auto' or mode='a' to append, or delete the file first if you really want to overwrite."
+                )
+            elif mode in ['auto', 'a']:
+                # Safe: use append mode to preserve existing data
+                pass
+            else:
+                raise ValueError(f"Invalid mode '{mode}'. Use 'auto', 'a', or 'w'.")
+            
             self._h5file = h5py.File(filename, 'a')
             
             if experiment_name in self._h5file:
@@ -96,7 +109,7 @@ class Series:
                     # New series in existing experiment
                     self._h5group = exp_group.create_group(self.name)
             else:
-                # New experiment
+                # New experiment in existing file
                 exp_group = self._h5file.create_group(experiment_name)
                 if experiment_metadata:
                     for key, value in experiment_metadata.items():
@@ -104,7 +117,10 @@ class Series:
                             exp_group.attrs[key] = value
                 self._h5group = exp_group.create_group(self.name)
         else:
-            # Create new file
+            # File doesn't exist - create new file
+            if mode == 'a':
+                raise ValueError(f"File '{filename}' doesn't exist. Cannot use mode='a' (append) on non-existent file.")
+            # mode is 'auto' or 'w' - both create new file
             self._h5file = h5py.File(filename, 'w')
             exp_group = self._h5file.create_group(experiment_name)
             if experiment_metadata:
@@ -226,6 +242,12 @@ class Series:
             count = len(self)  # Use __len__ which handles all cases
             for i in range(count):
                 yield self._read_trace(i)
+        elif self._source and len(self.traces) == 0:
+            # Series was loaded from HDF5 but not opened for reading
+            raise RuntimeError(
+                f"Series '{self.name}' was loaded from HDF5 but not opened for reading. "
+                f"Call series.open_for_reading() first to access trace data."
+            )
         else:
             yield from self.traces
     
@@ -248,6 +270,12 @@ class Series:
                 start, stop, step = index.indices(len(self))
                 return [self._read_trace(i) for i in range(start, stop, step)]
             return self._read_trace(index)
+        elif self._source and len(self.traces) == 0:
+            # Series was loaded from HDF5 but not opened for reading
+            raise RuntimeError(
+                f"Series '{self.name}' was loaded from HDF5 but not opened for reading. "
+                f"Call series.open_for_reading() first to access trace data."
+            )
         return self.traces[index]
     
     def to_matrix(self, dtype=np.float32):
