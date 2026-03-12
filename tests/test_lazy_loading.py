@@ -104,7 +104,7 @@ class TestLazyLoading(unittest.TestCase):
         series.close_reading()
 
     def test_writing_always_streams(self):
-        series = Series("stream_test", traces=[])
+        series = Series("stream_test", traces=[], trace_type=Trace)
         series.open_for_writing(self.test_file, "exp1")
 
         for i in range(10):
@@ -122,13 +122,13 @@ class TestLazyLoading(unittest.TestCase):
                 np.testing.assert_array_almost_equal(samples[i], np.ones(100, dtype=np.float32) * i)
 
     def test_append_mode(self):
-        series1 = Series("series1", traces=[])
+        series1 = Series("series1", traces=[], trace_type=Trace)
         series1.open_for_writing(self.test_file, "exp1")
         for i in range(5):
             series1.add_trace(Trace(samples=np.ones(100, dtype=np.float32) * i))
         series1.close_writing()
 
-        series2 = Series("series2", traces=[])
+        series2 = Series("series2", traces=[], trace_type=Trace)
         series2.open_for_writing(self.test_file, "exp1", mode='a')
         for i in range(5, 10):
             series2.add_trace(Trace(samples=np.ones(100, dtype=np.float32) * i))
@@ -141,7 +141,7 @@ class TestLazyLoading(unittest.TestCase):
             self.assertEqual(f['exp1']['series2']['samples'].shape[0], 5)
 
     def test_mode_transitions(self):
-        series = Series("test", traces=[])
+        series = Series("test", traces=[], trace_type=Trace)
         from scam.series import SeriesMode
         self.assertEqual(series._mode, SeriesMode.MEMORY)
 
@@ -164,7 +164,7 @@ class TestLazyLoading(unittest.TestCase):
         self.assertEqual(series._mode, SeriesMode.MEMORY)
 
     def test_large_dataset_efficiency(self):
-        series = Series("large", traces=[])
+        series = Series("large", traces=[], trace_type=Trace)
         series.open_for_writing(self.test_file, "exp1")
 
         for i in range(10000):

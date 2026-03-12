@@ -186,6 +186,24 @@ def schema_from_json(json_str):
     return fields
 
 
+def make_trace_type(json_str):
+    """Build a dataclass from stored schema JSON.
+
+    slots=True ensures AttributeError on invalid field access.
+    """
+    field_descriptors = schema_from_json(json_str)
+    dc_fields = []
+    for name, kind, np_dtype, py_type in field_descriptors:
+        if kind == 'array':
+            ann = Array[np_dtype.type]
+        elif kind == 'bytes':
+            ann = bytes
+        elif kind == 'scalar':
+            ann = Scalar[py_type]
+        dc_fields.append((name, ann, dataclasses.field(default=None)))
+    return dataclasses.make_dataclass('DynamicTrace', dc_fields, slots=True)
+
+
 def validate_schema_match(cls, json_str):
     """Validate that a dataclass schema matches stored HDF5 schema JSON."""
     expected = schema_fields(cls)

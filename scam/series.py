@@ -1,9 +1,8 @@
 from dataclasses import dataclass, field
 from enum import Enum
-from .trace import Trace
 from .schema import (
     schema_fields, schema_to_json, schema_from_json, validate_schema_match,
-    _to_hdf5_value, _from_hdf5_value, SchemaError,
+    make_trace_type, _to_hdf5_value, _from_hdf5_value, SchemaError,
 )
 import h5py
 import numpy as np
@@ -79,11 +78,14 @@ class Series:
     _trace_count: int = field(default=0, init=False)
 
     def __post_init__(self):
-        if self.trace_type is None:
-            self.trace_type = Trace
-        self._schema_fields = schema_fields(self.trace_type)
+        if self.trace_type is not None:
+            self._schema_fields = schema_fields(self.trace_type)
+        else:
+            self._schema_fields = None  # deferred until open_for_reading
 
         if self.traces:
+            if self.trace_type is None:
+                raise TypeError("trace_type required when constructing Series with traces")
             first = self.traces[0]
             if type(first) is not self.trace_type:
                 raise TypeError(f"Expected {self.trace_type.__name__}, got {type(first).__name__}")
@@ -141,6 +143,11 @@ class Series:
         """Open series for writing - ALWAYS streams to HDF5."""
         if self._mode != SeriesMode.MEMORY:
             raise RuntimeError(f"Cannot open for writing in {self._mode} mode")
+
+        if self.trace_type is None:
+            raise TypeError("trace_type is required for writing")
+        if self._schema_fields is None:
+            self._schema_fields = schema_fields(self.trace_type)
 
         if measurement_id is None:
             measurement_id = _SESSION_UUID
@@ -227,7 +234,10 @@ class Series:
         if self._mode == SeriesMode.READING:
             raise RuntimeError("Cannot add traces in READING mode")
 
-        if type(trace) is not self.trace_type:
+        if self.trace_type is None:
+            self.trace_type = type(trace)
+            self._schema_fields = schema_fields(self.trace_type)
+        elif type(trace) is not self.trace_type:
             raise TypeError(f"Expected {self.trace_type.__name__}, got {type(trace).__name__}")
 
         # Lock shapes on first trace
@@ -323,7 +333,15 @@ class Series:
 
         # Recover schema fields for reading
         if '_scam_schema' in self._h5group.attrs:
-            validate_schema_match(self.trace_type, self._h5group.attrs['_scam_schema'])
+            stored_json = self._h5group.attrs['_scam_schema']
+            if self.trace_type is not None:
+                validate_schema_match(self.trace_type, stored_json)
+            else:
+                self.trace_type = make_trace_type(stored_json)
+            self._schema_fields = schema_fields(self.trace_type)
+        else:
+            if self.trace_type is None:
+                raise SchemaError("No _scam_schema in file and no trace_type provided")
 
         # Recover shapes
         if '_scam_shapes' in self._h5group.attrs:
@@ -389,15 +407,15 @@ class Series:
         return self.traces[index]
 
     def to_matrix(self, dtype=None, field_name=None):
-        """Build matrix of all samples from the first (or named) Array field."""
+        """Build matrix of all samples from the first (or named) Array/bytes field."""
         target = None
         for name, kind, np_dtype, _ in self._schema_fields:
-            if kind == 'array':
+            if kind in ('array', 'bytes'):
                 if field_name is None or name == field_name:
                     target = (name, np_dtype)
                     break
         if target is None:
-            raise ValueError(f"No Array field found" + (f" named '{field_name}'" if field_name else ""))
+            raise ValueError(f"No Array/bytes field found" + (f" named '{field_name}'" if field_name else ""))
 
         ds_name, default_dtype = target
         if dtype is None:

@@ -8,7 +8,7 @@ import tempfile
 import os
 import numpy as np
 from dataclasses import dataclass
-from scam import Array, Scalar, Series, SchemaError
+from scam import Array, Scalar, Series, SchemaError, TraceDB, make_trace_type
 from scam.schema import schema_fields, schema_to_json, schema_from_json, validate_schema_match
 
 
@@ -501,6 +501,219 @@ class TestEdgeCases(unittest.TestCase):
             self.assertEqual(t.key, all_bytes_key)
             self.assertEqual(t.mask, high_mask)
             r.close_reading()
+
+
+class TestSchemalessReading(unittest.TestCase):
+    """Tests for schemaless deserialization.
+
+    Invariant: serialization ALWAYS requires trace_type,
+    deserialization NEVER requires it.
+    """
+
+    # ---- Enforcement: writing without trace_type must fail ----
+
+    def test_write_without_trace_type_raises(self):
+        """open_for_writing without trace_type raises TypeError."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            filename = os.path.join(tmpdir, "no_type.h5")
+            s = Series("test")
+            with self.assertRaises(TypeError):
+                s.open_for_writing(filename, "exp1")
+
+    # ---- Basic schemaless read (array + bytes fields) ----
+
+    def test_read_without_trace_type(self):
+        """Write MaskedAESTrace, read back without providing class."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            filename = os.path.join(tmpdir, "schemaless.h5")
+
+            s = Series("test", trace_type=MaskedAESTrace)
+            s.open_for_writing(filename, "exp1")
+            s.add_trace(MaskedAESTrace(
+                samples=np.ones(100, dtype=np.complex128) * (1 + 2j),
+                plaintext=bytes(range(16)),
+                ciphertext=bytes(16),
+                key=b'>>XMS IS GREAT<<',
+                mask=bytes(18),
+            ))
+            s.close_writing()
+
+            r = Series("test")
+            r.open_for_reading(filename, "exp1")
+            self.assertEqual(len(r), 1)
+            t = r[0]
+            self.assertEqual(t.samples.dtype, np.complex128)
+            np.testing.assert_array_equal(t.samples, np.ones(100, dtype=np.complex128) * (1 + 2j))
+            self.assertEqual(t.plaintext, bytes(range(16)))
+            self.assertEqual(t.key, b'>>XMS IS GREAT<<')
+            r.close_reading()
+
+    # ---- Scalars: int, float, str all survive schemaless roundtrip ----
+
+    def test_read_all_scalar_types_schemaless(self):
+        """FullTrace has int, float, str scalars — all recovered without class."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            filename = os.path.join(tmpdir, "scalars.h5")
+
+            s = Series("test", trace_type=FullTrace)
+            s.open_for_writing(filename, "exp1")
+            s.add_trace(FullTrace(
+                samples=np.array([1.0, 2.0, 3.0]),
+                plaintext=b'\xab\xcd',
+                label=42,
+                score=3.14,
+                note="hello",
+            ))
+            s.close_writing()
+
+            r = Series("test")
+            r.open_for_reading(filename, "exp1")
+            t = r[0]
+            self.assertEqual(t.label, 42)
+            self.assertIsInstance(t.label, int)
+            self.assertAlmostEqual(t.score, 3.14)
+            self.assertIsInstance(t.score, float)
+            self.assertEqual(t.note, "hello")
+            self.assertIsInstance(t.note, str)
+            self.assertEqual(t.plaintext, b'\xab\xcd')
+            r.close_reading()
+
+    # ---- Multi-trace + iteration + slicing ----
+
+    def test_multi_trace_iteration_and_slicing(self):
+        """Multiple traces: iteration and slicing work schemalessly."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            filename = os.path.join(tmpdir, "multi.h5")
+
+            s = Series("test", trace_type=SimpleTrace)
+            s.open_for_writing(filename, "exp1")
+            for i in range(20):
+                s.add_trace(SimpleTrace(
+                    samples=np.ones(10, dtype=np.float32) * i, label=i * 10,
+                ))
+            s.close_writing()
+
+            r = Series("test")
+            r.open_for_reading(filename, "exp1")
+            self.assertEqual(len(r), 20)
+
+            # Iteration
+            labels = [t.label for t in r]
+            self.assertEqual(labels, [i * 10 for i in range(20)])
+
+            # Indexing
+            self.assertEqual(r[7].label, 70)
+            np.testing.assert_array_equal(r[7].samples, np.ones(10, dtype=np.float32) * 7)
+
+            # Slicing
+            sliced = r[5:10]
+            self.assertEqual(len(sliced), 5)
+            self.assertEqual(sliced[0].label, 50)
+            self.assertEqual(sliced[4].label, 90)
+
+            r.close_reading()
+
+    # ---- to_matrix ----
+
+    def test_to_matrix_schemaless(self):
+        """to_matrix works without providing trace_type."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            filename = os.path.join(tmpdir, "matrix.h5")
+
+            s = Series("test", trace_type=SimpleTrace)
+            s.open_for_writing(filename, "exp1")
+            for i in range(5):
+                s.add_trace(SimpleTrace(samples=np.ones(10, dtype=np.float32) * i, label=i))
+            s.close_writing()
+
+            r = Series("test")
+            r.open_for_reading(filename, "exp1")
+            mat = r.to_matrix(field_name='samples')
+            self.assertEqual(mat.shape, (5, 10))
+            self.assertEqual(mat.dtype, np.float32)
+            np.testing.assert_array_equal(mat[3], np.ones(10, dtype=np.float32) * 3)
+            r.close_reading()
+
+    # ---- Dynamic class properties ----
+
+    def test_dynamic_class_has_slots(self):
+        """Dynamic trace class uses slots — invalid attr raises AttributeError."""
+        json_str = schema_to_json(SimpleTrace)
+        DynTrace = make_trace_type(json_str)
+        t = DynTrace(samples=np.zeros(5, dtype=np.float32), label=0)
+        with self.assertRaises(AttributeError):
+            t.bogus = 1
+
+    def test_schema_roundtrip(self):
+        """schema_fields(make_trace_type(json)) == schema_from_json(json)."""
+        for cls in [MaskedAESTrace, SimpleTrace, FullTrace]:
+            json_str = schema_to_json(cls)
+            dynamic_cls = make_trace_type(json_str)
+            dynamic_fields = schema_fields(dynamic_cls)
+            stored_fields = schema_from_json(json_str)
+            self.assertEqual(len(dynamic_fields), len(stored_fields))
+            for df, sf in zip(dynamic_fields, stored_fields):
+                self.assertEqual(df[0], sf[0])  # name
+                self.assertEqual(df[1], sf[1])  # kind
+                self.assertEqual(df[2], sf[2])  # dtype
+
+    # ---- Error paths ----
+
+    def test_provided_wrong_type_raises(self):
+        """Providing wrong trace_type for reading still raises SchemaError."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            filename = os.path.join(tmpdir, "wrong.h5")
+
+            s = Series("test", trace_type=MaskedAESTrace)
+            s.open_for_writing(filename, "exp1")
+            s.add_trace(MaskedAESTrace(
+                samples=np.ones(50, dtype=np.complex128),
+                plaintext=bytes(16), ciphertext=bytes(16),
+                key=bytes(16), mask=bytes(18),
+            ))
+            s.close_writing()
+
+            wrong = Series("test", trace_type=SimpleTrace)
+            with self.assertRaises(SchemaError):
+                wrong.open_for_reading(filename, "exp1")
+
+    def test_no_schema_no_type_raises(self):
+        """Legacy file without _scam_schema + no trace_type raises SchemaError."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            filename = os.path.join(tmpdir, "legacy.h5")
+            import h5py
+            with h5py.File(filename, 'w') as f:
+                g = f.create_group('exp1/test')
+                g.create_dataset('samples', data=np.zeros((5, 10)))
+
+            r = Series("test")
+            with self.assertRaises(SchemaError):
+                r.open_for_reading(filename, "exp1")
+
+    # ---- TraceDB integration ----
+
+    def test_tracedb_schemaless(self):
+        """TraceDB.load_hdf5 without trace_types auto-detects schema."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            filename = os.path.join(tmpdir, "tracedb.h5")
+
+            s = Series("traces", trace_type=MaskedAESTrace)
+            s.open_for_writing(filename, "exp1")
+            s.add_trace(MaskedAESTrace(
+                samples=np.ones(50, dtype=np.complex128) * 3j,
+                plaintext=bytes(16), ciphertext=bytes(16),
+                key=b'0123456789abcdef', mask=bytes(18),
+            ))
+            s.close_writing()
+
+            db = TraceDB.load_hdf5(filename)
+            series = db["exp1"]["traces"]
+            series.open_for_reading()
+            self.assertEqual(len(series), 1)
+            t = series[0]
+            np.testing.assert_array_equal(t.samples, np.ones(50, dtype=np.complex128) * 3j)
+            self.assertEqual(t.key, b'0123456789abcdef')
+            series.close_reading()
 
 
 if __name__ == '__main__':

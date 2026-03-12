@@ -42,7 +42,7 @@ class TestSeries(unittest.TestCase):
     """Test Series class functionality."""
 
     def setUp(self):
-        self.series = Series("test_series", traces=[])
+        self.series = Series("test_series", traces=[], trace_type=Trace)
         self.trace1 = Trace(samples=np.array([1, 2, 3], dtype=np.float32))
         self.trace2 = Trace(samples=np.array([4, 5, 6], dtype=np.float32))
         self.trace_wrong_shape = Trace(samples=np.array([1, 2, 3, 4], dtype=np.float32))

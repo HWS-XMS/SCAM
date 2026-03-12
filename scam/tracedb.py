@@ -1,7 +1,6 @@
 from dataclasses import dataclass, field
 from .experiment import Experiment
 from .series import Series
-from .trace import Trace
 from .schema import (
     schema_fields, schema_to_json, schema_from_json,
     _to_hdf5_value, _from_hdf5_value,
@@ -169,7 +168,7 @@ class TraceDB:
                     series_group = exp_group[series_name]
 
                     # Determine trace type
-                    tt = trace_types.get(series_name, Trace)
+                    tt = trace_types.get(series_name, None)
 
                     series = Series(name=series_name, traces=[], trace_type=tt)
                     series._source = (filename, exp_name)
